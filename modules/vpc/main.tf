@@ -1,161 +1,140 @@
-###############################################
-#LOCALS VARIABLES
-###############################################
+
 locals {
-  cluster_tag = var.eks_cluster_name != "default-eks-cluster" ? {
-    "kubernetes.io/cluster/${var.env}-${var.eks_cluster_name}" = "owned"
-  } : {}
+  subnet_count = length(var.availability_zones)
 }
 
-
-###############################################
-#VPC
-###############################################
-resource "aws_vpc" "my_vpc" {
-  cidr_block       = var.cidr_block
-  instance_tenancy = "default"
-
+// vpc
+resource "aws_vpc" "main" {
+  cidr_block = var.vpc_cidr_block
 
   enable_dns_support   = true
   enable_dns_hostnames = true
 
 
-  tags = {
-    Name = "${var.env}-${var.name}"
-  }
+  tags = merge(
+    var.resource_tags,
+    {
+      Name = "${var.resource_tags["Project"]}-main-vpc"
+    }
+  )
+
+  region = var.region
 }
 
-###############################################
-#PUBLIC SUBNETS
-###############################################
+
+// subnets and subnet associations
 resource "aws_subnet" "public_subnet" {
-  count                   = var.no_of_public_subnets
-  vpc_id                  = aws_vpc.my_vpc.id
-  cidr_block              = cidrsubnet(var.cidr_block, 8, count.index)
-  availability_zone       = var.azs[count.index]
+  count                   = local.subnet_count
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = var.public_subnet_cidr_blocks[count.index]
+  availability_zone       = var.availability_zones[count.index]
   map_public_ip_on_launch = true
 
   tags = merge(
+    var.resource_tags,
     {
-      Name                     = "${var.env}-public_subnet-${var.azs[count.index]}"
-      "kubernetes.io/role/elb" = "1"
-    },
-    local.cluster_tag
+      Name = "${var.resource_tags["Project"]}-public-subnet-${count.index}"
+    }
   )
 }
 
-###############################################
-#PRIVATE SUBNETS
-###############################################
 resource "aws_subnet" "private_subnet" {
-  count             = var.no_of_private_subnets
-  vpc_id            = aws_vpc.my_vpc.id
-  cidr_block        = cidrsubnet(var.cidr_block, 8, count.index + var.no_of_public_subnets)
-  availability_zone = var.azs[count.index]
+  count             = local.subnet_count
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = var.private_subnet_cidr_blocks[count.index]
+  availability_zone = var.availability_zones[count.index]
 
   tags = merge(
+    var.resource_tags,
     {
-      Name                              = "${var.env}-private_subnet-${var.azs[count.index]}"
-      "kubernetes.io/role/internal-elb" = "1"
-    },
-    local.cluster_tag
+      Name = "${var.resource_tags["Project"]}-private-subnet-${count.index}"
+    }
   )
 }
 
-
-###############################################
-#INTERNET GATEWAY
-###############################################
-resource "aws_internet_gateway" "gw" {
-  vpc_id = aws_vpc.my_vpc.id
-
-  tags = {
-    Name = "${var.env}-IGW"
-  }
+resource "aws_route_table_association" "public_subnet_assoc" {
+  count          = local.subnet_count
+  subnet_id      = aws_subnet.public_subnet[count.index].id
+  route_table_id = aws_route_table.public_rt.id
 }
 
-
-###############################################
-#NAT(NETWORK ADDRESS TRANSLATION) GATEWAY
-###############################################
-resource "aws_nat_gateway" "ngw" {
-  allocation_id = aws_eip.nat_ip.id
-  subnet_id     = aws_subnet.public_subnet[0].id
-
-  tags = {
-    Name = "${var.env}-NGW"
-  }
-
-  depends_on = [aws_internet_gateway.gw]
+resource "aws_route_table_association" "private_subnet_assoc" {
+  count          = local.subnet_count
+  subnet_id      = aws_subnet.private_subnet[count.index].id
+  route_table_id = aws_route_table.private_rt.id
 }
 
-
-
-###############################################
-#ELASTIC IP
-###############################################
-resource "aws_eip" "nat_ip" {
+resource "aws_eip" "nat_eip" {
+  count  = var.enable_ngw ? 1 : 0
   domain = "vpc"
 
-  tags = {
-    Name = "${var.env}-NAT-EIP"
+  tags = merge(
+    var.resource_tags,
+    {
+      Name = "${var.resource_tags["Project"]}-nat-eip"
+    }
+  )
+}
+
+//igw and natgw
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
+
+  tags = merge(
+    var.resource_tags,
+    {
+      Name = "${var.resource_tags["Project"]}-main-igw"
+    }
+  )
+}
+
+resource "aws_nat_gateway" "nat_gw" {
+  count         = var.enable_ngw ? 1 : 0
+  allocation_id = aws_eip.nat_eip[0].id
+  subnet_id     = aws_subnet.public_subnet[0].id
+
+  tags = merge(
+    var.resource_tags,
+    {
+      Name = "${var.resource_tags["Project"]}-nat-gw"
+    }
+  )
+
+  depends_on = [aws_internet_gateway.igw]
+}
+
+
+// route table and routes
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
   }
+
+  tags = merge(
+    var.resource_tags,
+    {
+      Name = "${var.resource_tags["Project"]}-public-rt"
+    }
+  )
 }
 
+resource "aws_route_table" "private_rt" {
+  vpc_id = aws_vpc.main.id
 
-###############################################
-#PUBLIC ROUTE TABLE
-###############################################
-resource "aws_route_table" "public_route_table" {
-  vpc_id = aws_vpc.my_vpc.id
-
-  tags = {
-    Name = "${var.env}-public"
-  }
+  tags = merge(
+    var.resource_tags,
+    {
+      Name = "${var.resource_tags["Project"]}-private-rt"
+    }
+  )
 }
 
-resource "aws_route" "public_r" {
-  for_each               = toset(var.public_routes_cidr_blocks)
-  route_table_id         = aws_route_table.public_route_table.id
-  destination_cidr_block = each.value
-  gateway_id             = aws_internet_gateway.gw.id
-}
-
-
-###############################################
-#PRIVATE ROUTE TABLE
-###############################################
-resource "aws_route_table" "private_route_table" {
-  vpc_id = aws_vpc.my_vpc.id
-
-  tags = {
-    Name = "${var.env}-private"
-  }
-}
-
-resource "aws_route" "private_r" {
-  for_each               = toset(var.private_routes_cidr_blocks)
-  route_table_id         = aws_route_table.private_route_table.id
-  destination_cidr_block = each.value
-  nat_gateway_id         = aws_nat_gateway.ngw.id
-}
-
-
-###############################################
-#PUBLIC TABLE ASSOCIATION
-###############################################
-resource "aws_route_table_association" "public_a" {
-  count          = var.no_of_public_subnets
-  subnet_id      = aws_subnet.public_subnet[count.index].id
-  route_table_id = aws_route_table.public_route_table.id
-}
-
-
-###############################################
-#PRIVATE TABLE ASSOCIATION
-###############################################
-resource "aws_route_table_association" "private_a" {
-  count          = var.no_of_private_subnets
-  subnet_id      = aws_subnet.private_subnet[count.index].id
-  route_table_id = aws_route_table.private_route_table.id
+resource "aws_route" "private_default_via_nat" {
+  count                  = var.enable_ngw ? 1 : 0
+  route_table_id         = aws_route_table.private_rt.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.nat_gw[0].id
 }

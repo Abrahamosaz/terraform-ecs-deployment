@@ -1,52 +1,36 @@
-variable "name" {
-    type = string
+variable "vpc_cidr_block" {
+  description = "CIDR range for vpc"
+  type        = string
 }
 
-variable "eks_cluster_name" {
-    type = string
-    description = "Name of the EKS cluster"
-    default     = "default-eks-cluster"
+variable "public_subnet_cidr_blocks" {
+  description = "CIDR blocks for public subnets."
+  type        = list(string)
 }
 
-variable "env" {
-    type = string
-    default = "dev"
+variable "private_subnet_cidr_blocks" {
+  description = "CIDR blocks for private subnets."
+  type        = list(string)
 }
 
-variable "cidr_block" {
-    type = string
+variable "resource_tags" {
+  description = "Tags for this project resources"
+  type        = map(string)
 }
 
 variable "region" {
-    type = string
+  description = "Region for deploying resources"
+  type        = string
 }
 
-variable "azs" {
-    
-    type = list(string)
-    description = "List of exactly two Availability Zones"
-    validation {
-        condition     = length(var.azs) == 2
-        error_message = "Exactly two availability zones must be provided."
-    }
+variable "availability_zones" {
+  description = "Multi AZ for high availability, it should match the number of subnets (both private and public)"
+  type        = list(string)
 }
 
-variable "no_of_public_subnets" {
-    type = number
-    default = 2
-}
 
-variable "no_of_private_subnets" {
-    type = number
-    default = 2
-}
-
-variable "public_routes_cidr_blocks" {
-    type = list(string)
-    default = ["0.0.0.0/0"]
-}
-
-variable "private_routes_cidr_blocks" {
-    type = list(string)
-    default = ["0.0.0.0/0"]
+variable "enable_ngw" {
+  description = "Boolean to control if a nat gateway should be created for private subnet"
+  type        = bool
+  default     = false
 }
