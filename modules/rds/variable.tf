@@ -45,6 +45,19 @@ variable "engine" {
   default     = "mysql"
 }
 
+
+variable "enable_multiaz" {
+  description = "Enable rds on multiaz for high availability"
+  type        = bool
+  default     = false
+}
+
+variable "enable_encryption" {
+  description = "Enable encryption for data at rest"
+  type        = bool
+  default     = true
+}
+
 variable "instance_class" {
   description = "Class of instance type for db"
   type        = string

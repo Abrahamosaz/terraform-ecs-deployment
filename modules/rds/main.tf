@@ -11,10 +11,10 @@ resource "aws_db_instance" "rds" {
   engine                 = var.engine
   engine_version         = data.aws_rds_engine_version.selected.version
   instance_class         = var.instance_class
-  multi_az               = true
+  multi_az               = var.enable_multiaz
   username               = var.username
   password               = var.password
-  storage_encrypted      = true
+  storage_encrypted      = var.enable_encryption
   skip_final_snapshot    = true
   db_subnet_group_name   = aws_db_subnet_group.rds.name
   vpc_security_group_ids = var.vpc_security_group_ids
