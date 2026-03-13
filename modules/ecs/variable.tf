@@ -67,5 +67,6 @@ variable "services" {
     port          = number
     desired_count = number
     health_check  = string
+    environment   = map(string)
   }))
 }

@@ -18,6 +18,11 @@ variable "resource_tags" {
   type        = map(string)
 }
 
+variable "db_name" {
+  description = "Database Name"
+  type        = string
+}
+
 variable "region" {
   description = "Region for deploying resources"
   type        = string

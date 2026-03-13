@@ -65,6 +65,10 @@ resource "aws_ecs_capacity_provider" "ecs_capacity_provider" {
       maximum_scaling_step_size = 2
     }
   }
+
+  depends_on = [
+    aws_autoscaling_group.ecs_asg
+  ]
 }
 
 
@@ -268,6 +272,10 @@ resource "aws_autoscaling_group" "ecs_asg" {
     value               = "${var.resource_tags["Project"]}-ecs-instance"
     propagate_at_launch = true
   }
+
+
+  // to ensure proper cleanup
+  force_delete = true
 }
 
 
@@ -294,6 +302,13 @@ resource "aws_ecs_task_definition" "this" {
         {
           containerPort = each.value.port
           protocol      = "tcp"
+        }
+      ]
+
+      environment = [
+        for env_name, env_value in try(each.value.environment, {}) : {
+          name  = env_name
+          value = env_value
         }
       ]
 
@@ -414,6 +429,17 @@ resource "aws_lb_listener_rule" "service_rules" {
 
   listener_arn = aws_lb_listener.http.arn
   priority     = 100 + index(keys(var.services), each.key)
+
+  # Rewrite /backend or /frontend (and subpaths) to root path so targets receive /
+  transform {
+    type = "url-rewrite"
+    url_rewrite_config {
+      rewrite {
+        regex   = "^/${each.key}/?(.*)"
+        replace = "/$1"
+      }
+    }
+  }
 
   action {
     type             = "forward"
