@@ -15,7 +15,6 @@ module "vpc" {
   enable_ngw                 = true
 }
 
-
 module "ecs" {
   source = "./modules/ecs"
 
@@ -44,7 +43,6 @@ module "ecs" {
       environment = {
         BACKEND_URL = "http://${module.ecs.alb_dns}/backend"
       }
-
     },
     backend = {
       image         = "abrahamosaz/ecs-project-backend:linux"

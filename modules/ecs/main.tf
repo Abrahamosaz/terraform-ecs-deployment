@@ -361,6 +361,11 @@ resource "aws_ecs_service" "this" {
   depends_on = [
     aws_ecs_cluster_capacity_providers.ecs_cluster_capacity_providers
   ]
+
+  timeouts {
+    # Service deletion can take time due to draining + ENI cleanup.
+    delete = "30m"
+  }
 }
 
 
@@ -380,6 +385,10 @@ resource "aws_lb" "alb" {
       Name = "${var.resource_tags["Project"]}-ecs-alb"
     }
   )
+
+  timeouts {
+    delete = "30m"
+  }
 }
 
 
@@ -394,6 +403,9 @@ resource "aws_lb_target_group" "alb_target_group" {
 
   region      = var.region
   target_type = "ip"
+
+  # Speed up destroy by shortening deregistration wait.
+  deregistration_delay = 10
 
   health_check {
     path                = each.value.health_check

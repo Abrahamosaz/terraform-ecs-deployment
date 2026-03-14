@@ -101,6 +101,11 @@ resource "aws_nat_gateway" "nat_gw" {
   )
 
   depends_on = [aws_internet_gateway.igw]
+
+  timeouts {
+    # NAT gateways can take a long time to fully delete in AWS.
+    delete = "30m"
+  }
 }
 
 
